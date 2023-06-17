@@ -1,3 +1,9 @@
+.DS_store
+.DS_Store
+.vscode
+#*/corpus
+*/sents*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
