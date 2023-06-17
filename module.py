@@ -445,6 +445,50 @@ class ReconstructionModel(nn.Module):
             min_improvement=min_improvement, 
             save_best=save_best,)
 
+class TokenProjectorLR(ReconstructionModel): 
+    dim_token:int 
+
+    def __init__(self, dim_token:int):
+        super().__init__()
+        self.dim_token=dim_token
+        self.encoder = nn.Linear(dim_token, dim_token)
+        self.decoder = nn.Linear(dim_token*2, 1)
+
+    def forward(self, batch): 
+        u, v, y = zip(*batch)
+        u = T(np.array(u)).float()
+        v = T(np.array(v)).float()
+        y = T(np.array(y)).float()
+        u = self.encoder(u)
+        v = self.encoder(v)
+        uv = torch.hstack([u, v])
+        y_hat = self.decoder(uv).squeeze(1)
+        return y_hat, y
+
+    def loss_fn(self, y_hat, y):
+        return F.binary_cross_entropy_with_logits(y_hat, y.float())
+
+class TokenProjectorDot(ReconstructionModel): 
+    dim_token:int 
+
+    def __init__(self, dim_token:int):
+        super().__init__()
+        self.dim_token=dim_token
+        self.encoder = nn.Linear(dim_token, dim_token)
+
+    def forward(self, batch): 
+        u, v, y = zip(*batch)
+        u = T(np.array(u)).float()
+        v = T(np.array(v)).float()
+        y = T(np.array(y)).float()
+        u = self.encoder(u)
+        v = self.encoder(v)
+        dot = torch.sum(u*v, dim=1)
+        return dot, y
+
+    def loss_fn(self, y_hat, y):
+        return F.binary_cross_entropy_with_logits(y_hat, y.float())
+
 class TestTrafo(ReconstructionModel):
     # this is only to test if positional encodings work 
     def __init__(self, max_len=8, dim_token=8, num_layers=4, **kwargs):

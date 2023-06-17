@@ -5,12 +5,6 @@ from gensim.models.word2vec import LineSentence
 from gensim.models import KeyedVectors
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn import svm
-from sklearn import tree
-from sklearn import ensemble
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import classification_report, f1_score, accuracy_score
 import os
 
 dirs = [
