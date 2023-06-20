@@ -15,8 +15,26 @@ import random
 from collections import deque 
 import time
 import os, shutil
+from re import sub
+from collections import deque
 
 tmp_fname = '.tmp.pt'
+
+def camel_case(s):
+  s = sub(r"(_|-)+", " ", s).title().replace(" ", "")
+  return ''.join([s[0].lower(), s[1:]])
+
+def format_as_filename(params): 
+    def val2str(val):
+        if type(val) == bool: 
+            return 'Y' if val else 'N'
+        if type(val) == float: 
+            return f'{val:.2E}'
+        if type(val) == int: 
+            return str(val)
+        return val
+    parts = [f'{camel_case(key)}={val2str(val)}' for key, val in params.items()]
+    return '_'.join(parts)
 
 class TurboSequencer(nn.Module):
     """Module that can decode sequences and teacher force."""
@@ -88,6 +106,7 @@ class LSTMEncoder(nn.LSTM):
     def __init__(self, dim_input, dim_output, **kwargs):
         if 'hidden_size' not in kwargs:
             kwargs['hidden_size'] = 16
+        self.hyperparams=kwargs
         super().__init__(input_size=dim_input, **kwargs)
         if 'bidirectional' in kwargs and kwargs['bidirectional']: 
             self.proj_layer = nn.Linear(kwargs['hidden_size']*2, dim_output)
@@ -99,139 +118,6 @@ class LSTMEncoder(nn.LSTM):
         out = out.mean(dim=0) # aggregate time dim. => (batch_size, dim_hidden*D)
         out = self.proj_layer(out) # (batch_size, dim_token)
         return out
-
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, max_len: int = 100, batch_first:bool=False):
-        super().__init__()
-        #self.dropout = nn.Dropout(p=dropout)
-        self.batch_first = batch_first
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x: T) -> T:
-        """
-        Args:
-            x: Tensor, shape [seq_len, batch_size, embedding_dim]
-        """
-        if self.batch_first: 
-            x = x.transpose(0, 1)
-        pos = self.pe[:x.size(0)]
-        x = x + pos
-        #return self.dropout(x)
-        if self.batch_first: 
-            x = x.transpose(0, 1)
-        return x
-
-class TransformerModel(nn.Module):
-    def __init__(self, dim_model:int, max_len:int=100, aggregate=False, hyperparams:dict={}, conv_start:bool=False):
-        super().__init__()
-        _hp = hyperparams.copy()
-
-        num_layers = _hp.get('num_layers', 2)
-        try: del _hp['num_layers']
-        except KeyError: pass
-        
-        if conv_start: 
-            self.conv_start = nn.Conv1d(in_channels=1, )
-        else: 
-            self.conv_start = None
-
-        self.batch_first = _hp.get('batch_first', False)
-        self.pos_enc = PositionalEncoding(dim_model, max_len, self.batch_first)
-        self.aggregate = aggregate
-        encoder_layer = nn.TransformerEncoderLayer(dim_model, **_hp)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
-    def forward(self, x, aggregate_override=None):
-        """ Returns top level embedding as mean of the sequence """
-        x = self.pos_enc(x)
-        x = self.transformer(x)
-        if aggregate_override is None:
-            aggregate_override = self.aggregate
-        if aggregate_override:
-            x = torch.mean(x, dim=0)
-        return x
-
-#m = TransformerModel(dim_model=8, max_len=4, aggregate=False, hyperparams={'num_layers': 2, 'nhead': 4, 'dim_feedforward': 32}, conv=True)
-
-class CharacterLevelCNN(nn.Module):
-    # see https://github.com/uvipen/Character-level-cnn-pytorch
-    def __init__(
-        self, 
-        dim_token=68,
-        dim_out=14, 
-        max_context_size=1014, 
-        n_conv_filters=256,
-        n_fc_neurons=1024,
-        ):
-        super(CharacterLevelCNN, self).__init__()
-        self.conv1 = nn.Sequential(nn.Conv1d(dim_token, n_conv_filters, kernel_size=7, padding=0), nn.ReLU(),
-                                   nn.MaxPool1d(3))
-        self.conv2 = nn.Sequential(nn.Conv1d(n_conv_filters, n_conv_filters, kernel_size=7, padding=0), nn.ReLU(),
-                                   nn.MaxPool1d(3))
-        self.conv3 = nn.Sequential(nn.Conv1d(n_conv_filters, n_conv_filters, kernel_size=3, padding=0), nn.ReLU())
-        self.conv4 = nn.Sequential(nn.Conv1d(n_conv_filters, n_conv_filters, kernel_size=3, padding=0), nn.ReLU())
-        self.conv5 = nn.Sequential(nn.Conv1d(n_conv_filters, n_conv_filters, kernel_size=3, padding=0), nn.ReLU())
-        self.conv6 = nn.Sequential(nn.Conv1d(n_conv_filters, n_conv_filters, kernel_size=3, padding=0), nn.ReLU(),
-                                   nn.MaxPool1d(3))
-
-        dimension = int((max_context_size - 96) / 27 * n_conv_filters)
-        self.fc1 = nn.Sequential(nn.Linear(dimension, n_fc_neurons), nn.Dropout(0.5))
-        self.fc2 = nn.Sequential(nn.Linear(n_fc_neurons, n_fc_neurons), nn.Dropout(0.5))
-        self.fc3 = nn.Linear(n_fc_neurons, dim_out)
-
-        if n_conv_filters == 256 and n_fc_neurons == 1024:
-            self._create_weights(mean=0.0, std=0.05)
-        elif n_conv_filters == 1024 and n_fc_neurons == 2048:
-            self._create_weights(mean=0.0, std=0.02)
-
-    def _create_weights(self, mean=0.0, std=0.05):
-        for module in self.modules():
-            if isinstance(module, nn.Conv1d) or isinstance(module, nn.Linear):
-                module.weight.data.normal_(mean, std)
-
-    def forward(self, input):
-        input = input.transpose(1, 2)
-        output = self.conv1(input)
-        output = self.conv2(output)
-        output = self.conv3(output)
-        output = self.conv4(output)
-        output = self.conv5(output)
-        output = self.conv6(output)
-
-        output = output.view(output.size(0), -1)
-        output = self.fc1(output)
-        output = self.fc2(output)
-        output = self.fc3(output)
-
-        return output
-
-#cnn = CharacterLevelCNN()
-#print(cnn(torch.rand(8, 1014, 68)).shape)
-#x = torch.rand(5, 10, 12)
-#out = m(x)
-#print(out.shape)
-#exit()
-
-class TransformerEncoder(TransformerModel):
-    def __init__(self, dim_input, dim_output, **kwargs):
-        super().__init__(dim_model=dim_input, **kwargs)
-        self.proj_layer = nn.Linear(dim_input, dim_output)
-
-    def forward(self, x):
-        out = super().forward(x)
-        out = self.proj_layer(out)
-        return out
-
-#m = TransformerEncoder(8, 4, num_layers=2, nhead=4, dim_feedforward=32)
-#x = torch.rand(5, 10, 12)
-#out = m(x)
-#print(out.shape)
-#exit()
 
 class ReconstructionModel(nn.Module):
     def __init__(self):
@@ -280,10 +166,21 @@ class ReconstructionModel(nn.Module):
                 print(f"new best loss ({self.best_loss:.6f} -> {val:.6f})")
             self.best_loss = val 
             self.epochs_since_new_best = 0
+
             if self.save_best is None: 
                 torch.save(self.state_dict(), tmp_fname)
             else: 
                 torch.save(self.state_dict(), self.save_best)
+
+            if self.checkpoints is not None: 
+                if len(self.checkpoints) == self.checkpoints.maxlen:
+                    to_delete = self.checkpoints.popleft()
+                    os.remove(to_delete)
+                info = format_as_filename({'epoch':self.epoch, 'batch':self.batch_i, 'loss':self.best_loss})
+                cpt = f'{self.save_best}.{info}.cpt'
+                self.checkpoints.append(cpt)
+                torch.save(self.state_dict(), cpt)
+            
             return True
         self.epochs_since_new_best += 1
         return False
@@ -316,7 +213,9 @@ class ReconstructionModel(nn.Module):
         optim:torch.optim.Optimizer=None, 
         patience:int=5, 
         min_improvement:float=.01, 
-        save_best:str=None) -> Union[Iterator, Iterator, torch.optim.Optimizer]:
+        save_best:str=None,
+        save_last=0,
+        rehearsal_run=False) -> Union[Iterator, Iterator, torch.optim.Optimizer]:
         """_summary_
 
         Args:
@@ -363,6 +262,12 @@ class ReconstructionModel(nn.Module):
                 print(f'no test set supplied')
                 
         self.converged = False
+
+        if save_last > 0: 
+            self.checkpoints = deque(maxlen=save_last)
+        else: 
+            self.checkpoints=None
+
         for epoch in range(max_epochs if until_convergence else epochs): 
             self.epoch = epoch
             for batch in batches_train:
@@ -386,7 +291,7 @@ class ReconstructionModel(nn.Module):
                     last_test_loss = self._record_test_loss(batches_test, verbose)
                     self._try_record_best_loss(last_test_loss, verbose, min_improvement)
 
-                if until_convergence and self.epochs_since_new_best >= patience:
+                if (until_convergence and self.epochs_since_new_best >= patience) or (rehearsal_run and self.best_loss < np.inf):
                     print(f"converged after {epoch} epochs (lowest achieved loss: {self.best_loss:.4f})")
                     self.converged = True; break
             if self.converged: break
@@ -400,7 +305,7 @@ class ReconstructionModel(nn.Module):
                 last_test_loss = self._record_test_loss(batches_test, verbose)
                 self._try_record_best_loss(last_test_loss, verbose, min_improvement)
 
-            if until_convergence and self.epochs_since_new_best >= patience:
+            if (until_convergence and self.epochs_since_new_best >= patience) or (rehearsal_run and self.best_loss < np.inf):
                 print(f"converged after {epoch} epochs (lowest achieved loss: {self.best_loss:.4f})")
                 self.converged = True; break
             
@@ -432,6 +337,7 @@ class ReconstructionModel(nn.Module):
         patience = params.get('patience', 5)
         min_improvement = params.get('min_improvement', 0)
         save_best = params.get('save_best', None)
+        save_last = params.get('save_last', 0)
         return self.train_batches(
             batches_train=batches_train, 
             epochs=epochs, 
@@ -443,7 +349,8 @@ class ReconstructionModel(nn.Module):
             optim=optim, 
             patience=patience, 
             min_improvement=min_improvement, 
-            save_best=save_best,)
+            save_best=save_best,
+            save_last=save_last,)
 
 class TokenProjectorLR(ReconstructionModel): 
     dim_token:int 
@@ -489,364 +396,183 @@ class TokenProjectorDot(ReconstructionModel):
     def loss_fn(self, y_hat, y):
         return F.binary_cross_entropy_with_logits(y_hat, y.float())
 
-class TestTrafo(ReconstructionModel):
-    # this is only to test if positional encodings work 
-    def __init__(self, max_len=8, dim_token=8, num_layers=4, **kwargs):
+class CNNEncoder(nn.Module):
+    def __init__(self, dim_token:int, n_conv_filters:int, dropout:float, n_fc:int) -> None:
         super().__init__()
-        self.max_len=max_len
+        self.dim_token=dim_token
+        self.n_conv_filters=n_conv_filters
+        self.dropout=dropout
+        self.n_fc=n_fc
+        self.cnn1 = nn.Sequential(nn.Conv1d(in_channels=dim_token, out_channels=n_conv_filters, kernel_size=5, padding=2), nn.ReLU(), nn.MaxPool1d(2))
+        self.cnn2 = nn.Sequential(nn.Conv1d(in_channels=n_conv_filters, out_channels=n_conv_filters, kernel_size=3, padding=1), nn.ReLU())
+        self.cnn3 = nn.Sequential(nn.Conv1d(in_channels=n_conv_filters, out_channels=n_conv_filters, kernel_size=3, padding=1), nn.ReLU())
+        self.cnn4 = nn.Sequential(nn.Conv1d(in_channels=n_conv_filters, out_channels=n_conv_filters, kernel_size=3, padding=0), nn.ReLU(), nn.MaxPool1d(2))
+        self.fc1 = nn.Sequential(nn.Linear(n_conv_filters*4, n_fc), nn.Dropout(dropout))
+        self.fc2 = nn.Sequential(nn.Linear(n_fc, n_fc), nn.Dropout(dropout)),
+        self.fc3 = nn.Linear(n_fc, dim_token), # (batch, dim_out)
 
-        self.pos_enc = PositionalEncoding(dim_token, max_len, False)
-        encoder_layer = nn.TransformerEncoderLayer(dim_token, **kwargs)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-        self.proj = nn.Linear(dim_token, max_len)
+    def forward(self, x:T):
+        # input should be (batch_size, dim_token, sentence_len)
+        x = self.cnn1(x)
+        x = self.cnn2(x)
+        x = self.cnn3(x)
+        x = self.cnn4(x)
+        x = x.view((-1, self.n_conv_filters*4))
+        x = self.fc1(x)
+        x = self.fc2(x)
+        x = self.fc3(x)
+        return x # should be (batch_size, dim_token)
 
-    def loss_fn(self, x, p):
-        p = p.unsqueeze(-1).expand(x.shape[:-1])
-        return F.cross_entropy(x.view(-1, x.shape[-1]), p.flatten())
+class CNNDecoder(nn.Module):
+    def __init__(self, dim_token:int, n_conv_filters:int, dropout:float, n_fc:int) -> None:
+        super().__init__()
+        self.dim_token=dim_token
+        self.n_conv_filters=n_conv_filters
+        self.dropout=dropout
+        self.n_fc=n_fc
 
-    def forward(self, x):
-        p = T(np.random.permutation(self.max_len)).long()
-        x = self.pos_enc(x)
-        x = x[p]
-        x = self.transformer(x)
-        x = self.proj(x)
-        return x, p
+        self.fc1 = nn.Sequential(nn.Linear(dim_token, n_fc), nn.Dropout(dropout))
+        self.fc2 = nn.Sequential(nn.Linear(n_fc, n_fc), nn.Dropout(dropout))
+        self.fc3 = nn.Linear(n_fc, n_conv_filters*4)
+        #LambdaModule(lambda x: x.view((-1, n_conv_filters, 4))),
+        self.cnn1 = nn.Sequential(nn.ConvTranspose1d(in_channels=n_conv_filters, out_channels=n_conv_filters, kernel_size=5, padding=0), nn.ReLU()),
+        self.cnn2 = nn.Sequential(nn.ConvTranspose1d(in_channels=n_conv_filters, out_channels=n_conv_filters, kernel_size=5, padding=0), nn.ReLU()),
+        self.cnn3 = nn.Sequential(nn.ConvTranspose1d(in_channels=n_conv_filters, out_channels=n_conv_filters, kernel_size=5, padding=0), nn.ReLU()),
+        self.cnn4 = nn.Sequential(nn.ConvTranspose1d(in_channels=n_conv_filters, out_channels=dim_token, kernel_size=5, padding=0), nn.ReLU()),
+        
+    def forward(self, x:T):
+        # input should be (batch_size, dim_token)
+        x = self.fc1(x)
+        x = self.fc2(x)
+        x = self.fc3(x)
+        x = x.view((-1, self.n_conv_filters, 4))
+        x = self.cnn1(x)
+        x = self.cnn2(x)
+        x = self.cnn3(x)
+        x = self.cnn4(x)
+        return x # should be (batch_size, dim_token, sentence_len)
 
-class UniversalVAE(ReconstructionModel):
+class SentenceProjector(ReconstructionModel):
+    dim_token:int 
+
+    def __init__(self, dim_token:int, n_conv_filters=128, dropout=.5, n_fc=256):
+        super().__init__()
+        self.dim_token=dim_token
+        self.encoder = CNNEncoder(dim_token, n_conv_filters, dropout, n_fc)
+
+    def forward(self, batch): 
+        u, v, y = zip(*batch)
+        u = T(np.array(u)).float()
+        v = T(np.array(v)).float()
+        y = T(np.array(y)).float()
+        u = self.encoder(u)
+        v = self.encoder(v)
+        dot = torch.sum(u*v, dim=1)
+        return dot, y
+
+    def loss_fn(self, y_hat, y):
+        return F.binary_cross_entropy_with_logits(y_hat, y.float())
+
+class SentenceVAE(ReconstructionModel):
     dim_latent: int
     beta: float
-    mask_rate: float
-    mask_with: Union[int, float]
-    batch_first: bool
-    padding_token: Union[int, float]
     categorical: bool
 
     def __init__(
         self, 
         encoder:nn.Module, 
         decoder:nn.Module, 
-        dim_encoder_out:int, 
+        dim_token:int, 
         dim_latent:int, 
-        categorical:bool,
-        dim_decoder_in:int=-1, 
+        cnn_params:dict,
         beta:float=1.0,
-        masked:bool=False,
-        skipgram:bool=False,
-        mask_with:Union[int, float]=0,
-        batch_first:bool=False,
-        padding_token:Union[int, float]=-1,
-        mask_agg:str='mean', # mean, first, max
-        masked_batch_refeed_rate:int=None,
         ):
         super().__init__()
-        self.encoder = encoder
-        self.decoder = decoder
+        self.encoder = CNNEncoder(**cnn_params)
+        self.decoder = CNNDecoder(**cnn_params)
         self.dim_latent = dim_latent
         self.beta = beta
-        self.masked=masked
-        self.skipgram=skipgram
-        self.mask_with=mask_with
-        self.batch_first=batch_first
-        self.padding_token=padding_token
-        self.mask_agg=mask_agg
-        self.masked_batch_refeed_rate=masked_batch_refeed_rate
-        self.categorical=categorical
 
-        self.fc1 = nn.Linear(dim_encoder_out, dim_encoder_out//2)
-        self.fc21 = nn.Linear(dim_encoder_out//2, dim_latent)
-        self.fc22 = nn.Linear(dim_encoder_out//2, dim_latent)
-
-        if dim_decoder_in == -1: 
-            dim_decoder_in = dim_encoder_out
-        self.fc3 = nn.Linear(dim_latent, dim_decoder_in)
-        #self.fc3 = nn.Linear(dim_latent, dim_decoder_in//2)
-        #self.fc4 = nn.Linear(dim_decoder_in//2, dim_decoder_in)
-
-    def train_batch(self, batch, optim) -> Union[T, None]:
-        if self.masked:
-            sublosses = []
-            if self.masked_batch_refeed_rate is not None and self.masked_batch_refeed_rate > 0: 
-                for i in range(self.masked_batch_refeed_rate):
-                    # refeed with random masking
-                    sublosses.append(super().train_batch(batch, optim))
-            else: 
-                # refeed position by position 
-                positions = list(range(self.seq_dim_size(batch)))
-                random.shuffle(positions)
-                for position in positions: 
-                    mask = self.generate_mask(batch, position, True)
-                    subloss=super().train_batch(batch, optim, kwargs={'mask_ext':mask})
-                    sublosses.append(subloss)
-            loss = float(np.mean(sublosses))
-        else: 
-            loss = super().train_batch(batch, optim)
-        return loss
+        self.fc1 = nn.Linear(dim_token, dim_latent)
+        self.fc2 = nn.Linear(dim_token, dim_latent)
+        self.fc3 = nn.Linear(dim_latent, dim_token)
 
     def encode(self, x) -> Tuple[torch.Tensor, torch.Tensor]:
         enc = self.encoder(x)
-        enc = self.fc1(enc)
-        mean = self.fc21(enc)
-        logvar = self.fc22(enc)
+        mean = self.fc1(enc)
+        logvar = self.fc2(enc)
         return mean, logvar
 
     def decode(self, z):
         dec = self.fc3(z)
-        #dec = F.relu(dec)
-        #dec = self.fc4(dec)
         dec = self.decoder(dec)
         return dec
 
     def reconstruction_error(self, x_pred, x):
-        if self.categorical: 
-            return F.cross_entropy(x_pred.view(x.shape.numel(), -1), x.flatten(), reduction='mean')
-        else:
-            return F.mse_loss(x_pred, x, reduction='mean')
+        return F.mse_loss(x_pred, x, reduction='mean')
 
     def reparameterize(self, mean, logvar):
         std = torch.exp(.5*logvar)
         eps = torch.rand_like(std)*2-1
         return mean + eps*std
 
-    def seq_dim(self) -> int: 
-        return 1 if self.batch_first else 0
-
-    def batch_dim(self) -> int: 
-        return 0 if self.batch_first else 1
-
-    def seq_dim_size(self, x:T) -> int:
-        return x.shape[self.seq_dim()]
-
-    def batch_dim_size(self, x:T) -> int:
-        return x.shape[self.batch_dim()]
-
-    def unpadded(self, x: T):
-        if self.categorical: 
-            is_not_padding = (x != self.padding_token)
-        else:
-            is_not_padding = torch.abs(x.mean(dim=-1) - self.padding_token) > 1e-8
-        return is_not_padding
-
-    def unpadded_range(self, x:T):
-        is_not_padding = self.unpadded(x)
-        res = is_not_padding.sum(dim=self.seq_dim())
-        return res
-
-    def generate_mask(self, x: T, pos=None, force_pos:bool=False) -> Tuple[T, T]: 
-        if pos is None: 
-            pos = torch.randint(0, self.seq_dim_size(x), (self.batch_dim_size(x),))
-        elif type(pos) == int: 
-            pos = T([pos for _ in range(self.batch_dim_size(x))]).long()
-        else: 
-            assert len(pos) == self.batch_dim_size(x)
-        
-        ranges = self.unpadded_range(x)
-        last_unpadded_idx = ranges - 1
-        if force_pos: 
-            mask_idx_along_seq = pos
-        else:    
-            mask_idx_along_seq = torch.min(last_unpadded_idx, pos)
-            mask_idx_along_seq = torch.max(mask_idx_along_seq, torch.zeros_like(mask_idx_along_seq).long())
-
-        return mask_idx_along_seq
-        
-    def agg_over_time(self, mean:T, logvar:T)->T:
-        if self.mask_agg=='max':
-            mean, _ = mean.max(dim=self.seq_dim())
-            logvar, _ = logvar.max(dim=self.seq_dim())
-        elif self.mask_agg=='mean':
-            mean = mean.mean(dim=self.seq_dim())
-            logvar = logvar.mean(dim=self.seq_dim())
-        else: 
-            if self.batch_first: 
-                mean = mean[:, 0]
-                logvar = logvar[:, 0]
-            else: 
-                mean = mean[0]
-                logvar = logvar[0]
-        return mean, logvar
-
-    def forward_normal(self, x:T):
+    def forward(self, x:T):
         # encode 
         mean, logvar = self.encode(x)
         # reparameterize and decode
-        if self.beta == 0: # if beta=0 then KLD term will not contribute to the loss anyways
+        if self.beta == 0: # if beta=0 then this is a regular autoencoder
             z = mean
         else:
             z = self.reparameterize(mean, logvar)
         x_pred = self.decode(z)
         return x_pred, x, mean, logvar, z
 
-    def forward_mask(self, x:T, mask_ext:T=None):
-        # "skipgram" version
-        if mask_ext is None: 
-            mask = self.generate_mask(x)
-        else: 
-            mask = mask_ext
-        assert len(mask) == self.batch_dim_size(x)
-    
-        contexts = x.clone()
-        if self.batch_first: 
-            pivots = x[np.arange(self.batch_dim_size(x)), mask].clone() # index the masked tokens (later to be predicted and compared against)
-            contexts[np.arange(self.batch_dim_size(x)), mask] = self.mask_with
-        else: 
-            pivots = x[mask, np.arange(self.batch_dim_size(x))].clone()
-            contexts[mask, np.arange(self.batch_dim_size(x))] = self.mask_with
-    
-        # encode 
-        if self.skipgram: 
-            mean, logvar = self.encode(pivots.unsqueeze(self.seq_dim()))
-        else: 
-            mean, logvar = self.encode(contexts)
-            # get rid of time dimension to produce representation for the masked token
-            mean, logvar = self.agg_over_time(mean, logvar)
-            mean = mean.unsqueeze(self.seq_dim())
-            logvar = logvar.unsqueeze(self.seq_dim())
-
-        # reparameterize and decode
-        if self.beta == 0: # if beta=0 then KLD term will not contribute to the loss anyways
-            z = mean
-        else:
-            z = self.reparameterize(mean, logvar)
-        x_pred = self.decode(z)
-
-        # squeeze again so that the output can be readily used as a representation for the masked token 
-        x_pred = x_pred.squeeze(dim=self.seq_dim())
-        z = z.squeeze(dim=self.seq_dim())
-        mean = mean.squeeze(dim=self.seq_dim())
-        logvar = logvar.squeeze(dim=self.seq_dim())
-
-        if self.skipgram: 
-            # expand to compare against multiple words in context
-            exp_shape = (self.seq_dim_size(x), *x_pred.shape)
-            x_pred = x_pred.unsqueeze(0).expand(exp_shape).contiguous()
-            if self.batch_first: 
-                x_pred = x_pred.transpose(0,1)
-            return x_pred, contexts, mean, logvar, z
-        else: 
-            return x_pred, pivots, mean, logvar, z
-            
-    def forward(self, x:T, mask_ext:T=None) -> Tuple[T, T, T, T, T, T]:
-        if self.masked: 
-            return self.forward_mask(x, mask_ext)
-        else: 
-            return self.forward_normal(x)
-
     def loss_fn(self, x_pred:T, x:T, mean:T, logvar:T, z:T) -> Union[T, None]:
-        if self.masked: 
-            BCE = self.reconstruction_error(x_pred, x)
-        else: 
-            # compute loss between all non-padding elements in x and x_pred
-            # dont move this filtering procedure to the forward_normal method, so that all (inc. padding) embeddings are outputted
-            is_not_padding = self.unpadded(x)
-            logvar = logvar[is_not_padding]
-            mean = mean[is_not_padding]
-            BCE = self.reconstruction_error(x_pred[is_not_padding], x[is_not_padding])
-        
+        BCE = self.reconstruction_error(x_pred, x)        
         BCE = BCE.mean()
-
         # KL divergence from prior on z
         KLD = -.5 * torch.mean(1 + logvar - mean.pow(2) - logvar.exp())
         elbo = BCE + (KLD * self.beta)
         return elbo
 
-def prior(K, alpha):
-    """
-    Prior for the model.
-    :K: number of categories
-    :alpha: Hyper param of Dir
-    :return: mean and variance tensors
-    """
-    # ラプラス近似で正規分布に近似
-    # Approximate to normal distribution using Laplace approximation
-    a = torch.Tensor(1, K).float().fill_(alpha)
-    mean = a.log().t() - a.log().mean(1)
-    var = ((1 - 2.0 / K) * a.reciprocal()).t() + (1.0 / K ** 2) * a.reciprocal().sum(1)
-    return mean.t(), var.t() # Parameters of prior distribution after approximation
-
-class DirichletVAE(UniversalVAE):
-    """ Adopted from https://github.com/is0383kk/Dirichlet-VAE """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Dir prior
-        self.prior_mean, self.prior_var = map(nn.Parameter, prior(self.dim_latent, 0.3)) # 0.3 is a hyper param of Dirichlet distribution
-        self.prior_logvar = nn.Parameter(self.prior_var.log())
-        self.prior_mean.requires_grad = False
-        self.prior_var.requires_grad = False
-        self.prior_logvar.requires_grad = False
-
-    def encode(self, x):
-        conv = self.encoder(x)
-        #h1 = self.fc1(conv.view(-1, 1024)) # not sure if this view is necessary here.
-        h1 = self.fc1(conv)
-        return self.fc21(h1), self.fc22(h1)
-
-    def decode(self, gauss_z):
-        dir_z = F.softmax(gauss_z,dim=1) 
-        # This variable (z) can be treated as a variable that follows a Dirichlet distribution (a variable that can be interpreted as a probability that the sum is 1)
-        # Use the Softmax function to satisfy the simplex constraint
-        # シンプレックス制約を満たすようにソフトマックス関数を使用
-        #z = dir_z.argmax(-1)
-        #z_emb = self.decoder_emb(z)
-        
-        h3 = self.relu(self.fc3(dir_z))
-        deconv_input = self.fc4(h3)
-        #deconv_input = deconv_input.view(-1,1024,1,1)
-        return self.decoder(deconv_input)
-
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5*logvar)
-        eps = torch.randn_like(std)
-        return mu + eps*std
-
-    def forward(self, x):
-        mu, logvar = self.encode(x)
-        gauss_z = self.reparameterize(mu, logvar) 
-        # gause_z is a variable that follows a multivariate normal distribution
-        # Inputting gause_z into softmax func yields a random variable that follows a Dirichlet distribution (Softmax func are used in decoder)
-        dir_z = F.softmax(gauss_z,dim=1) # This variable follows a Dirichlet distribution
-        x_pred = self.decode(gauss_z)
-        return x_pred, x, mu, logvar
-
-    def reconstruction_error(self, x_pred, x):
-        raise Exception('implement me pls')
-
-    # Reconstruction + KL divergence losses summed over all elements and batch    
-    def loss_fn(self, x_pred, x, mu, logvar):
-        K = 10
-        beta = 1.0
-        BCE = self.reconstruction_error(x_pred, x)
-        #BCE = F.cross_entropy(x_pred.view(x.shape.numel(), -1), x.flatten(), reduction='sum')
-        # ディリクレ事前分布と変分事後分布とのKLを計算
-        # Calculating KL with Dirichlet prior and variational posterior distributions
-        # Original paper:"Autoencodeing variational inference for topic model"-https://arxiv.org/pdf/1703.01488
-        prior_mean = self.prior_mean.expand_as(mu)
-        prior_var = self.prior_var.expand_as(logvar)
-        prior_logvar = self.prior_logvar.expand_as(logvar)
-        var_division = logvar.exp() / prior_var # Σ_0 / Σ_1
-        diff = mu - prior_mean # μ_１ - μ_0
-        diff_term = diff *diff / prior_var # (μ_1 - μ_0)(μ_1 - μ_0)/Σ_1
-        logvar_division = prior_logvar - logvar # log|Σ_1| - log|Σ_0| = log(|Σ_1|/|Σ_2|)
-        # KL
-        KLD = 0.5 * ((var_division + diff_term + logvar_division).sum(-1) - K)        
-        loss = BCE + KLD
-        loss = loss.mean()
-        return loss
-
-class CategoricalDirichletVAE(DirichletVAE):
-    def reconstruction_error(self, x_pred, x):
-        return F.cross_entropy(x_pred.view(x.shape.numel(), -1), x.flatten(), reduction='sum')
-
-class ContinuousDirichletVAE(DirichletVAE):
-    def reconstruction_error(self, x_pred, x):
-        return F.mse_loss(x_pred, x, reduction='sum')
-        
 class LambdaModule(nn.Module):
     def __init__(self, fn):
         super().__init__()
         self.fn = fn
     def forward(self, x):
         return self.fn(x)
+
+class SequenceSG(ReconstructionModel):
+    def __init__(self, dim_token, dim_latent, hyperparams={}, emb_layer=None):
+        super().__init__()
+        self.emb_layer = emb_layer
+        self.encoder = LSTMEncoder(dim_token, dim_latent, **hyperparams)
+        decoder_lstm = LSTMEncoder(dim_token+dim_latent, dim_token, **hyperparams)
+        self.decoder = TurboSequencer(decoder_lstm, dim_token, dim_latent)
+
+    def forward(self, batch):
+        pivot, neighbor = zip(*batch)
+        if self.emb_layer is None: 
+            pivot = T(pivot).float()
+            neighbor = T(neighbor).float()
+        else: 
+            pivot = T(pivot).long()
+            neighbor = T(neighbor).long()
+            pivot = self.emb_layer(pivot)
+            neighbor = self.emb_layer(neighbor)
+        # transpose to sequence-first shape
+        pivot = pivot.transpose(0, 1).contiguous() 
+        neighbor = neighbor.transpose(0, 1).contiguous()
+        lat = self.encoder(pivot)
+        neighbor_hat = self.decoder.decode(
+            x_static=lat, 
+            teacher_force_y=neighbor,
+            #decoding_steps=
+            )
+        return neighbor_hat, neighbor
+    
+    def loss_fn(self, neighbor_hat, neighbor):
+        return F.mse_loss(neighbor_hat, neighbor, reduction='mean')
 
 def init_embedding(nin:int, nout=2, rang=10, typ='equidistant', seed=None):
     res = nn.Embedding(nin, nout) # default initialization is gaussian
@@ -855,7 +581,7 @@ def init_embedding(nin:int, nout=2, rang=10, typ='equidistant', seed=None):
         singles = [torch.linspace(-(rang/2), rang/2, steps=steps) for _ in range(nout)]
         axes = torch.meshgrid(*singles, indexing='ij')
         stacked = torch.stack(axes)
-        weights = stacked.transpose(0,2).reshape(-1, nout).contiguous()
+        weights = stacked.transpose(0,-1).reshape(-1, nout).contiguous()
         np.random.seed(seed)
         weights = weights[np.random.choice(np.arange(weights.shape[0]), replace=False, size=nin)]
         res.weight = nn.Parameter(weights)
