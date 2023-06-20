@@ -1,9 +1,10 @@
+from fileinput import fileno
 import os
 from segmenters.structure import StructuredCorpus
 import numpy as np
 import pandas as pd
 
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegressionCV
 from sklearn import svm
 from sklearn import tree
 from sklearn import ensemble
@@ -16,19 +17,21 @@ dirs = [
 ]
 n_labels=10
 n_samples=10000
+cv=10
 classifiers = {
-    'lr': lambda: LogisticRegression(random_state=1, max_iter=2000),
-    'svm_rbf': lambda: svm.SVC(kernel='rbf'),
-    'tree5': lambda: tree.DecisionTreeClassifier(random_state=1, max_depth=5),
-    'tree10': lambda: tree.DecisionTreeClassifier(random_state=1, max_depth=10),
-    'tree20': lambda: tree.DecisionTreeClassifier(random_state=1, max_depth=20),
-    'forest5': lambda: ensemble.RandomForestClassifier(random_state=1, max_depth=5),
-    'forest10': lambda: ensemble.RandomForestClassifier(random_state=1, max_depth=10),
-    'forest15': lambda: ensemble.RandomForestClassifier(random_state=1, max_depth=15),
-    'knn10': lambda: KNeighborsClassifier(n_neighbors=10),
-    'knn20': lambda: KNeighborsClassifier(n_neighbors=20),
-    'knn30': lambda: KNeighborsClassifier(n_neighbors=30),
-    'knn40': lambda: KNeighborsClassifier(n_neighbors=40),
+    f'lrcv{cv}': lambda: LogisticRegressionCV(random_state=1, max_iter=10000, cv=cv),
+    #'lr': lambda: LogisticRegression(random_state=1, max_iter=2000),
+    #'svm_rbf': lambda: svm.SVC(kernel='rbf'),
+    #'tree5': lambda: tree.DecisionTreeClassifier(random_state=1, max_depth=5),
+    #'tree10': lambda: tree.DecisionTreeClassifier(random_state=1, max_depth=10),
+    #'tree20': lambda: tree.DecisionTreeClassifier(random_state=1, max_depth=20),
+    #'forest5': lambda: ensemble.RandomForestClassifier(random_state=1, max_depth=5),
+    #'forest10': lambda: ensemble.RandomForestClassifier(random_state=1, max_depth=10),
+    #'forest15': lambda: ensemble.RandomForestClassifier(random_state=1, max_depth=15),
+    #'knn10': lambda: KNeighborsClassifier(n_neighbors=10),
+    #'knn20': lambda: KNeighborsClassifier(n_neighbors=20),
+    #'knn30': lambda: KNeighborsClassifier(n_neighbors=30),
+    #'knn40': lambda: KNeighborsClassifier(n_neighbors=40),
 }
 
 for dirname in dirs: 
@@ -70,9 +73,16 @@ for dirname in dirs:
     sent_dirs = [name for name in os.listdir(f'{dirname}') if 'sents' in name]
     for rep_type in ['iso', 'con']: 
         if not os.path.isdir(f'{dirname}/sents_{rep_type}'): continue
-        rep_names = os.listdir(f'{dirname}/sents_{rep_type}')
-        for name in rep_names: 
-            X_train = np.load(f'{dirname}/sents_{rep_type}/{name}/train.npy')
+        for name in os.listdir(f'{dirname}/sents_{rep_type}'): 
+            if name[0] == '.' or name[:2] not in ['AE', 'SG']:
+                continue
+            print(dirname, rep_type, name)
+            try: 
+                X_train = np.load(f'{dirname}/sents_{rep_type}/{name}/train.npy')
+            except FileNotFoundError: 
+                X_train = np.load(f'{dirname}/sents_{rep_type}/{name}/dev.npy')
+                simple_targets_train = simple_targets_dev
+
             X_test = np.load(f'{dirname}/sents_{rep_type}/{name}/test.npy')
 
             result = {
@@ -87,7 +97,7 @@ for dirname in dirs:
                 acc = accuracy_score(simple_targets_test, preds)
                 f1_micro = f1_score(simple_targets_test, preds, average='micro')
                 f1_macro = f1_score(simple_targets_test, preds, average='macro')
-                #print(f'{clf_name}\tacc={acc}\tf1_micro={f1_micro}\tf1_macro={f1_macro}')
+                print(f'{clf_name}\tacc={acc}\tf1_micro={f1_micro}\tf1_macro={f1_macro}')
                 result[f'{clf_name}_acc'] = acc
                 result[f'{clf_name}_f1ma'] = f1_macro
                 result[f'{clf_name}_f1mi'] = f1_micro
