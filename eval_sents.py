@@ -74,16 +74,19 @@ for dirname in dirs:
     for rep_type in ['iso', 'con']: 
         if not os.path.isdir(f'{dirname}/sents_{rep_type}'): continue
         for name in os.listdir(f'{dirname}/sents_{rep_type}'): 
-            if name[0] == '.' or name[:2] not in ['AE', 'SG']:
+            #if name[0] == '.' or name[:2] in ['AE', 'SG']:
+            if name[0] == '.':
                 continue
             print(dirname, rep_type, name)
             try: 
                 X_train = np.load(f'{dirname}/sents_{rep_type}/{name}/train.npy')
+                Y_train = simple_targets_train
             except FileNotFoundError: 
                 X_train = np.load(f'{dirname}/sents_{rep_type}/{name}/dev.npy')
-                simple_targets_train = simple_targets_dev
+                Y_train = simple_targets_dev
 
             X_test = np.load(f'{dirname}/sents_{rep_type}/{name}/test.npy')
+            Y_test = simple_targets_test
 
             result = {
                 'dataset': dirname, 
@@ -92,11 +95,11 @@ for dirname in dirs:
             }
             for clf_name, clf_init in classifiers.items():
                 clf = clf_init()
-                clf.fit(X_train[:n_samples], simple_targets_train[:n_samples])
-                preds = clf.predict(X_test)
-                acc = accuracy_score(simple_targets_test, preds)
-                f1_micro = f1_score(simple_targets_test, preds, average='micro')
-                f1_macro = f1_score(simple_targets_test, preds, average='macro')
+                clf.fit(X_train[:n_samples], Y_train[:n_samples])
+                Y_hat = clf.predict(X_test)
+                acc = accuracy_score(Y_test, Y_hat)
+                f1_micro = f1_score(Y_test, Y_hat, average='micro')
+                f1_macro = f1_score(Y_test, Y_hat, average='macro')
                 print(f'{clf_name}\tacc={acc}\tf1_micro={f1_micro}\tf1_macro={f1_macro}')
                 result[f'{clf_name}_acc'] = acc
                 result[f'{clf_name}_f1ma'] = f1_macro
