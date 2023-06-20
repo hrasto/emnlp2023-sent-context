@@ -36,9 +36,9 @@ def make_skipgrams(x: np.array, segmentation:list, context_size:int, limit=10000
 batch_size=512
 training_params={
     'epochs':-1, 
-    'lr':5e-3, 
+    'lr':1e-3, 
     'print_every':10,
-    'test_every':100,
+    'test_every':50,
     'patience':5,
     'min_improvement':.0,
 }

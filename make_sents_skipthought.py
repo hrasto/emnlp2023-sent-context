@@ -93,7 +93,7 @@ for context_size in [1, 2]:
                 batches_test=batches_dev,
                 save_best=f'{dirname}/models/{model_name}/model.pt',
                 save_last=50,
-                rehearsal_run=True,
+                #rehearsal_run=True,
                 **training_params
             )
             meta = {
