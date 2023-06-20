@@ -33,14 +33,7 @@ def make_skipgrams(x: np.array, segmentation:list, context_size:int, limit=10000
                 yield (x[pivot], x[pivot-i])
                 ct+=2
 
-dim_token = 8
-batch_size=64
-hyperparams = {
-    'bidirectional': True, 
-    'hidden_size': 64,
-    'num_layers': 2,
-    'dropout': .1,
-}
+batch_size=512
 training_params={
     'epochs':-1, 
     'lr':5e-3, 
@@ -49,7 +42,6 @@ training_params={
     'patience':5,
     'min_improvement':.0,
 }
-
 
 for dirname in dirs: 
     if not os.path.isdir(f'{dirname}/sents_iso'):
@@ -78,13 +70,13 @@ for dirname in dirs:
 
             batches_train = it.RestartableCallableIterator(make_skipgrams, fn_args=[embs_train, segmentation_train, context_size])
             batches_train = it.RestartableBatchIterator(batches_train, batch_size=batch_size)
-            batches_dev = it.RestartableBatchIterator(batches_dev, batch_size=batch_size)
+
             batches_dev = it.RestartableCallableIterator(make_skipgrams, fn_args=[embs_dev, segmentation_dev, context_size, 32*100])
             batches_dev = it.RestartableBatchIterator(batches_dev, batch_size=batch_size)
             #print(*zip(*next(iter(batches_dev))))
 
             # no embedding layer this time, as we already input sentence embeddings and only project them
-            model = module.SequenceSG(dim_token=dim_latent, dim_latent=dim_latent, hyperparams=hyperparams, emb_layer=None)
+            model = module.TokenSG(dim=dim_latent)
             
             if not os.path.isdir(f'{dirname}/models'):
                 os.mkdir(f'{dirname}/models')
@@ -102,9 +94,8 @@ for dirname in dirs:
             )
             meta = {
                 'training_params': training_params, 
-                'hyperparams': hyperparams,
                 'dim_latent': dim_latent,
-                'dim_token': dim_token,
+                'dim_token': dim_latent,
                 'batch_size': batch_size,
                 'dirname': dirname,
                 'model_name': model_name,
@@ -117,7 +108,7 @@ for dirname in dirs:
                 os.mkdir(f'{dirname}/sents_con')
 
             batches_test = it.RestartableBatchIterator(list(embs_test), batch_size*4)
-            batches_test = it.RestartableMapIterator(batches_test, lambda batch: T(batch).float().transpose(0, 1))
+            batches_test = it.RestartableMapIterator(batches_test, lambda batch: T(batch).float())
 
             embs_test=[]
             for batch in batches_test: 
@@ -129,7 +120,7 @@ for dirname in dirs:
             embs_test = torch.vstack(embs_test).detach().numpy()
 
             batches_dev = it.RestartableBatchIterator(list(embs_dev), batch_size*4)
-            batches_dev = it.RestartableMapIterator(batches_dev, lambda batch: T(batch).float().transpose(0, 1))
+            batches_dev = it.RestartableMapIterator(batches_dev, lambda batch: T(batch).float())
 
             embs_dev=[]
             for batch in batches_dev: 

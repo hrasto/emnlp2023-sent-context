@@ -28,7 +28,7 @@ def cut_and_pad_sequence(seq, max_words=20):
     return res
 
 dim_token = 8
-batch_size=64
+batch_size=32
 hyperparams = {
     'bidirectional': True, 
     'hidden_size': 64,
@@ -37,7 +37,7 @@ hyperparams = {
 }
 training_params={
     'epochs':-1, 
-    'lr':5e-3, 
+    'lr':3e-3, 
     'print_every':10,
     'test_every':100,
     'patience':5,
@@ -80,7 +80,7 @@ for dim_latent in [6, 12, 25]:
             batches_train=batches_train,
             batches_test=batches_dev,
             save_best=f'{dirname}/models/{model_name}/model.pt',
-            save_last=30,
+            save_last=50,
             #rehearsal_run=True,
             **training_params
         )

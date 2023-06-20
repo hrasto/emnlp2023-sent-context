@@ -574,6 +574,25 @@ class SequenceSG(ReconstructionModel):
     def loss_fn(self, neighbor_hat, neighbor):
         return F.mse_loss(neighbor_hat, neighbor, reduction='mean')
 
+class TokenSG(ReconstructionModel):
+    def __init__(self, dim):
+        super().__init__()
+        self.encoder = nn.Linear(dim, dim)
+        self.decoder = nn.Linear(dim, dim)
+
+    def forward(self, batch):
+        pivot, neighbor = zip(*batch)
+        pivot = T(np.array(pivot)).float()
+        neighbor = T(np.array(neighbor)).float()
+
+        lat = self.encoder(pivot)
+        neighbor_hat = self.decoder(lat)
+        return neighbor_hat, neighbor
+    
+    def loss_fn(self, neighbor_hat, neighbor):
+        return F.mse_loss(neighbor_hat, neighbor, reduction='mean')
+
+
 def init_embedding(nin:int, nout=2, rang=10, typ='equidistant', seed=None):
     res = nn.Embedding(nin, nout) # default initialization is gaussian
     if typ=='equidistant':

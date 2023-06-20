@@ -40,7 +40,7 @@ def make_skipgrams(x: np.array, segmentation:list, context_size:int, limit=10000
                 ct+=2
 
 dim_token = 8
-batch_size=64
+batch_size=32
 hyperparams = {
     'bidirectional': True, 
     'hidden_size': 64,
@@ -49,7 +49,7 @@ hyperparams = {
 }
 training_params={
     'epochs':-1, 
-    'lr':5e-3, 
+    'lr':3e-3, 
     'print_every':10,
     'test_every':100,
     'patience':5,
@@ -74,7 +74,7 @@ for context_size in [1, 2]:
 
             batches_train = it.RestartableCallableIterator(make_skipgrams, fn_args=[idx_train, segmentation_train, context_size])
             batches_train = it.RestartableBatchIterator(batches_train, batch_size=batch_size)
-            batches_dev = it.RestartableBatchIterator(batches_dev, batch_size=batch_size)
+
             batches_dev = it.RestartableCallableIterator(make_skipgrams, fn_args=[idx_dev, segmentation_dev, context_size, 32*100])
             batches_dev = it.RestartableBatchIterator(batches_dev, batch_size=batch_size)
             #print(*zip(*next(iter(batches_dev))))
@@ -92,8 +92,8 @@ for context_size in [1, 2]:
                 batches_train=batches_train,
                 batches_test=batches_dev,
                 save_best=f'{dirname}/models/{model_name}/model.pt',
-                save_last=30,
-                #rehearsal_run=True,
+                save_last=50,
+                rehearsal_run=True,
                 **training_params
             )
             meta = {
