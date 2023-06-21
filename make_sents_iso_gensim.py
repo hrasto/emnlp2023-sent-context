@@ -8,8 +8,8 @@ import numpy as np
 import os
 
 dirs = [
-    'swda_mfs_20w',
-    #'swda_mfs_100w',
+    #'swda_mfs_20w',
+    'swda_mfs_100w',
 ]
 w2v_models=[
     '../models-gensim/glove-twitter-25',

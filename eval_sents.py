@@ -13,7 +13,7 @@ from sklearn.metrics import classification_report, f1_score, accuracy_score
 
 dirs = [
     'swda_mfs_20w',
-    'swda_mfs_100w',
+    #'swda_mfs_100w',
 ]
 n_labels=10
 n_samples=10000

@@ -18,7 +18,8 @@ import numpy as np
 import os
 
 dirs = [
-    'swda_mfs_20w',
+    #'swda_mfs_20w',
+    'swda_mfs_100w',
 ]
 
 def cut_and_pad_sequence(seq, max_words=20):

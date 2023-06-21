@@ -1,7 +1,31 @@
-	dataset	type	representation	lr_acc	lr_f1ma	lr_f1mi	svm_rbf_acc	svm_rbf_f1ma	svm_rbf_f1mi	tree5_acc	tree5_f1ma	tree5_f1mi	tree10_acc	tree10_f1ma	tree10_f1mi	tree20_acc	tree20_f1ma	tree20_f1mi	forest5_acc	forest5_f1ma	forest5_f1mi	forest10_acc	forest10_f1ma	forest10_f1mi	forest15_acc	forest15_f1ma	forest15_f1mi	knn10_acc	knn10_f1ma	knn10_f1mi	knn20_acc	knn20_f1ma	knn20_f1mi	knn30_acc	knn30_f1ma	knn30_f1mi	knn40_acc	knn40_f1ma	knn40_f1mi
-0	swda_mfs_20w	iso	glove-twitter-25_mean	0.73	0.37	0.73	0.72	0.29	0.72	0.7	0.3	0.7	0.71	0.4	0.71	0.68	0.4	0.68	0.72	0.28	0.72	0.74	0.4	0.74	0.74	0.42	0.74	0.73	0.41	0.73	0.73	0.39	0.73	0.73	0.38	0.73	0.73	0.36	0.73
-1	swda_mfs_20w	iso	glove-wiki-gigaword-100_max	0.73	0.41	0.73	0.73	0.36	0.73	0.72	0.33	0.72	0.72	0.44	0.72	0.68	0.42	0.68	0.72	0.28	0.72	0.75	0.42	0.75	0.75	0.45	0.75	0.72	0.4	0.72	0.72	0.36	0.72	0.72	0.34	0.72	0.71	0.32	0.71
-2	swda_mfs_20w	iso	glove-wiki-gigaword-100_mean	0.74	0.4	0.74	0.73	0.36	0.73	0.69	0.29	0.69	0.7	0.36	0.7	0.66	0.36	0.66	0.7	0.25	0.7	0.72	0.36	0.72	0.73	0.39	0.73	0.73	0.41	0.73	0.73	0.38	0.73	0.73	0.36	0.73	0.72	0.35	0.72
-3	swda_mfs_20w	iso	glove-twitter-25_max	0.72	0.34	0.72	0.73	0.32	0.73	0.72	0.36	0.72	0.73	0.45	0.73	0.69	0.44	0.69	0.72	0.3	0.72	0.76	0.45	0.76	0.76	0.49	0.76	0.73	0.39	0.73	0.73	0.37	0.73	0.73	0.36	0.73	0.73	0.37	0.73
-4	swda_mfs_20w	iso	lda8	0.68	0.16	0.68	0.68	0.16	0.68	0.69	0.22	0.69	0.68	0.28	0.68	0.66	0.35	0.66	0.69	0.22	0.69	0.71	0.32	0.71	0.71	0.35	0.71	0.69	0.32	0.69	0.69	0.31	0.69	0.69	0.27	0.69	0.68	0.26	0.68
-5	swda_mfs_20w	iso	lsi8	0.68	0.23	0.68	0.7	0.27	0.7	0.71	0.28	0.71	0.73	0.41	0.73	0.7	0.42	0.7	0.71	0.27	0.71	0.74	0.41	0.74	0.75	0.44	0.75	0.72	0.36	0.72	0.73	0.39	0.73	0.72	0.36	0.72	0.72	0.35	0.72
+	dataset	type	representation	lrcv10_acc	lrcv10_f1ma	lrcv10_f1mi
+0	swda_mfs_20w	iso	AE_dim=12	0.71	0.26	0.71
+1	swda_mfs_20w	iso	lsi12	0.7	0.3	0.7
+2	swda_mfs_20w	iso	AE_dim=25	0.7	0.3	0.7
+3	swda_mfs_20w	iso	glove-twitter-25_mean	0.73	0.37	0.73
+4	swda_mfs_20w	iso	lsi25	0.74	0.4	0.74
+5	swda_mfs_20w	iso	AE_dim=6	0.7	0.23	0.7
+6	swda_mfs_20w	iso	lda12	0.68	0.19	0.68
+7	swda_mfs_20w	iso	lda25	0.68	0.19	0.68
+8	swda_mfs_20w	iso	lda6	0.68	0.16	0.68
+9	swda_mfs_20w	iso	lsi6	0.68	0.19	0.68
+10	swda_mfs_20w	con	glove-twitter-25_mean_context=2	0.73	0.36	0.73
+11	swda_mfs_20w	con	lda6_context=1	0.68	0.16	0.68
+12	swda_mfs_20w	con	lsi6_context=2	0.68	0.18	0.68
+13	swda_mfs_20w	con	lsi25_context=1	0.72	0.37	0.72
+14	swda_mfs_20w	con	lsi12_context=2	0.69	0.25	0.69
+15	swda_mfs_20w	con	lda25_context=1	0.68	0.17	0.68
+16	swda_mfs_20w	con	lda12_context=2	0.67	0.16	0.67
+17	swda_mfs_20w	con	SG_dim=6_context=2	0.68	0.19	0.68
+18	swda_mfs_20w	con	SG_dim=25_context=1	0.7	0.23	0.7
+19	swda_mfs_20w	con	SG_dim=12_context=2	0.7	0.21	0.7
+20	swda_mfs_20w	con	glove-twitter-25_mean_context=1	0.72	0.36	0.72
+21	swda_mfs_20w	con	lsi6_context=1	0.68	0.19	0.68
+22	swda_mfs_20w	con	lda6_context=2	0.68	0.16	0.68
+23	swda_mfs_20w	con	lsi12_context=1	0.7	0.27	0.7
+24	swda_mfs_20w	con	lsi25_context=2	0.71	0.36	0.71
+25	swda_mfs_20w	con	lda12_context=1	0.68	0.17	0.68
+26	swda_mfs_20w	con	SG_dim=6_context=1	0.67	0.19	0.67
+27	swda_mfs_20w	con	lda25_context=2	0.68	0.18	0.68
+28	swda_mfs_20w	con	SG_dim=12_context=1	0.7	0.24	0.7
+29	swda_mfs_20w	con	SG_dim=25_context=2	0.7	0.22	0.7
