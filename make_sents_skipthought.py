@@ -18,8 +18,8 @@ import numpy as np
 import os
 
 dirs = [
-    #'swda_mfs_20w',
-    'swda_mfs_100w',
+    'swda_mfs_20w',
+    #'swda_mfs_100w',
 ]
 
 def cut_and_pad_sequence(seq, max_words=20):
@@ -41,7 +41,7 @@ def make_skipgrams(x: np.array, segmentation:list, context_size:int, limit=10000
                 ct+=2
 
 dim_token = 8
-batch_size=32
+batch_size=64
 hyperparams = {
     'bidirectional': True, 
     'hidden_size': 64,
@@ -49,12 +49,12 @@ hyperparams = {
     'dropout': .1,
 }
 training_params={
-    'epochs':-1, 
-    'lr':3e-3, 
+    'epochs':5, 
+    'lr':1e-3, 
     'print_every':10,
-    'test_every':100,
-    'patience':5,
-    'min_improvement':.0,
+    'test_every':500,
+    #'patience':5,
+    #'min_improvement':.0,
 }
 
 for context_size in [1, 2]:
@@ -76,7 +76,7 @@ for context_size in [1, 2]:
             batches_train = it.RestartableCallableIterator(make_skipgrams, fn_args=[idx_train, segmentation_train, context_size])
             batches_train = it.RestartableBatchIterator(batches_train, batch_size=batch_size)
 
-            batches_dev = it.RestartableCallableIterator(make_skipgrams, fn_args=[idx_dev, segmentation_dev, context_size, 32*100])
+            batches_dev = it.RestartableCallableIterator(make_skipgrams, fn_args=[idx_dev, segmentation_dev, context_size, 32*1000])
             batches_dev = it.RestartableBatchIterator(batches_dev, batch_size=batch_size)
             #print(*zip(*next(iter(batches_dev))))
 
@@ -113,8 +113,8 @@ for context_size in [1, 2]:
             if not os.path.isdir(f'{dirname}/sents_con'):
                 os.mkdir(f'{dirname}/sents_con')
 
-            batches_test = it.RestartableBatchIterator(list(idx_test), batch_size*4)
-            batches_test = it.RestartableMapIterator(batches_test, lambda batch: T(batch).long().transpose(0, 1))
+            batches_test = it.RestartableBatchIterator(list(idx_test), 1024)
+            batches_test = it.RestartableMapIterator(batches_test, lambda batch: T(np.array(batch)).long().transpose(0, 1))
 
             embs_test=[]
             for batch in batches_test: 
@@ -125,8 +125,8 @@ for context_size in [1, 2]:
                 embs_test.append(batch)
             embs_test = torch.vstack(embs_test).detach().numpy()
 
-            batches_dev = it.RestartableBatchIterator(list(idx_dev), batch_size*4)
-            batches_dev = it.RestartableMapIterator(batches_dev, lambda batch: T(batch).long().transpose(0, 1))
+            batches_dev = it.RestartableBatchIterator(list(idx_dev), 1024)
+            batches_dev = it.RestartableMapIterator(batches_dev, lambda batch: T(np.array(batch)).long().transpose(0, 1))
 
             embs_dev=[]
             for batch in batches_dev: 
@@ -137,9 +137,21 @@ for context_size in [1, 2]:
                 embs_dev.append(batch)
             embs_dev = torch.vstack(embs_dev).detach().numpy()
 
+            batches_train = it.RestartableBatchIterator(list(idx_train), 1024)
+            batches_train = it.RestartableMapIterator(batches_train, lambda batch: T(np.array(batch)).long().transpose(0, 1))
+
+            embs_train=[]
+            for batch in batches_train: 
+                batch = emb_layer(batch)
+                with torch.no_grad(): 
+                    model_ae.eval()
+                    batch = model_ae.encoder(batch)
+                embs_train.append(batch)
+            embs_train = torch.vstack(embs_train).detach().numpy()
+
             if not os.path.isdir(f'{dirname}/sents_con/{model_name}'):
                 os.mkdir(f'{dirname}/sents_con/{model_name}')
 
-            #np.save(f'{dirname}/sents_con/{model_name}/train.npy', lsi_train)
+            np.save(f'{dirname}/sents_con/{model_name}/train.npy', embs_train)
             np.save(f'{dirname}/sents_con/{model_name}/dev.npy', embs_dev)
             np.save(f'{dirname}/sents_con/{model_name}/test.npy', embs_test)

@@ -1,10 +1,9 @@
-from fileinput import fileno
 import os
 from segmenters.structure import StructuredCorpus
 import numpy as np
 import pandas as pd
 
-from sklearn.linear_model import LogisticRegressionCV
+from sklearn.linear_model import LogisticRegressionCV, RidgeClassifierCV
 from sklearn import svm
 from sklearn import tree
 from sklearn import ensemble
@@ -106,5 +105,5 @@ for dirname in dirs:
                 result[f'{clf_name}_f1mi'] = f1_micro
             result_table.append(result)
     result_table = pd.DataFrame(result_table)
-    result_table = result_table.round(2)
+    result_table = result_table.round(4)
     result_table.to_csv(f'{dirname}/results.csv', sep='\t')

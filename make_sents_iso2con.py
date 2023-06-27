@@ -19,7 +19,7 @@ import os
 
 dirs = [
     'swda_mfs_20w',
-    'swda_mfs_100w',
+    #'swda_mfs_100w',
 ]
 
 def make_skipgrams(x: np.array, segmentation:list, context_size:int, limit=10000000):
@@ -36,11 +36,11 @@ def make_skipgrams(x: np.array, segmentation:list, context_size:int, limit=10000
 
 batch_size=512
 training_params={
-    'epochs':-1, 
+    'epochs':5, 
     'lr':1e-3, 
     'print_every':10,
     'test_every':50,
-    'patience':5,
+    #'patience':10,
     'min_improvement':.0,
 }
 
@@ -57,7 +57,8 @@ for dirname in dirs:
     segmentation_dev = list(cdev.derive_segment_boundaries('conversation_no', 'default'))    
 
     for name in os.listdir(f'{dirname}/sents_iso'):
-        if name[0] == '.' or name[:2] == 'AE': continue
+        #if name[0] == '.' or name[:2] == 'AE': continue
+        if name[0] == '.': continue
 
         # dim_latent inferred from isolated sentence representation shape
         embs_train = np.load(f'{dirname}/sents_iso/{name}/train.npy')

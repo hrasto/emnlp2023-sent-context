@@ -553,11 +553,11 @@ class SequenceSG(ReconstructionModel):
     def forward(self, batch):
         pivot, neighbor = zip(*batch)
         if self.emb_layer is None: 
-            pivot = T(pivot).float()
-            neighbor = T(neighbor).float()
+            pivot = T(np.array(pivot)).float()
+            neighbor = T(np.array(neighbor)).float()
         else: 
-            pivot = T(pivot).long()
-            neighbor = T(neighbor).long()
+            pivot = T(np.array(pivot)).long()
+            neighbor = T(np.array(neighbor)).long()
             pivot = self.emb_layer(pivot)
             neighbor = self.emb_layer(neighbor)
         # transpose to sequence-first shape
